@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dominion — World Conquest</title>
+<script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=MedievalSharp&family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=IM+Fell+English:ital@0;1&display=swap" rel="stylesheet">
+
+<style>
+/* ── Reset & Base ──────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;background:#2c1810;font-family:'Crimson Text',Georgia,serif}
+
+/* ── Paper Texture Variables ──────────────────────────── */
+:root{
+  --paper-bg:   #f5e8c8;
+  --paper-dark: #e8d4a0;
+  --paper-edge: #c4a45c;
+  --ink:        #1a0e00;
+  --ink-light:  #4a3018;
+  --red:        #8b1c1c;
+  --blue:       #1c3a8b;
+  --green:      #1c6b2a;
+  --shadow:     rgba(0,0,0,0.35);
+}
+
+/* ── Lobby ─────────────────────────────────────────────── */
+#lobby{
+  display:flex;align-items:center;justify-content:center;
+  width:100%;height:100%;
+  background:radial-gradient(ellipse at center, #3d1f0a 0%, #1a0a02 100%);
+  position:fixed;top:0;left:0;z-index:100;
+}
+.lobby-card{
+  background:var(--paper-bg);
+  border:3px solid var(--paper-edge);
+  border-radius:4px;
+  padding:40px 48px;
+  width:480px;max-width:95vw;
+  box-shadow:0 12px 48px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.5);
+  text-align:center;
+  position:relative;
+}
+.lobby-card::before{
+  content:'';position:absolute;inset:6px;
+  border:1px solid var(--paper-edge);
+  border-radius:2px;pointer-events:none;
+}
+.lobby-title{
+  font-family:'MedievalSharp',serif;font-size:2.4rem;
+  color:var(--ink);text-shadow:2px 2px 0 var(--paper-edge);
+  letter-spacing:.1em;margin-bottom:4px;
+}
+.lobby-subtitle{
+  font-family:'IM Fell English',serif;font-style:italic;
+  font-size:1rem;color:var(--ink-light);margin-bottom:28px;
+}
+.lobby-input-group{margin-bottom:16px;text-align:left}
+.lobby-input-group label{
+  display:block;font-size:.9rem;font-weight:600;
+  color:var(--ink-light);margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em;
+}
+.paper-input{
+  width:100%;padding:10px 14px;
+  background:#fdf5de;border:2px solid var(--paper-edge);
+  border-radius:3px;font-family:'Crimson Text',serif;font-size:1.1rem;
+  color:var(--ink);outline:none;
+  box-shadow:inset 0 2px 6px rgba(0,0,0,0.1);
+  transition:border-color .2s;
+}
+.paper-input:focus{border-color:#8b6914}
+.lobby-or{
+  font-style:italic;color:var(--ink-light);margin:14px 0;font-size:.9rem;
+}
+.room-code-display{
+  font-family:'MedievalSharp',serif;font-size:2rem;
+  letter-spacing:.3em;color:var(--red);
+  background:var(--paper-dark);border:2px solid var(--paper-edge);
+  padding:10px 20px;border-radius:3px;display:inline-block;margin-bottom:8px;
+}
+#lobby-players{margin:16px 0;text-align:left}
+.lobby-player{
+  display:flex;align-items:center;gap:10px;
+  padding:8px 12px;border-bottom:1px solid var(--paper-edge);
+  font-size:1rem;color:var(--ink);
+}
+.player-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+.host-badge{
+  margin-left:auto;font-size:.75rem;font-weight:700;
+  background:var(--red);color:#fff;padding:2px 8px;border-radius:10px;
+}
+#player-count{font-style:italic;color:var(--ink-light);font-size:.9rem;margin:6px 0}
+#waiting-msg{font-style:italic;color:var(--ink-light);margin-top:10px;font-size:.95rem}
+
+/* ── Buttons ────────────────────────────────────────────── */
+.btn-paper{
+  display:inline-block;padding:10px 22px;
+  background:linear-gradient(to bottom, #e8c87a, #c4a030);
+  border:2px solid #8b6914;border-radius:3px;
+  font-family:'Crimson Text',serif;font-size:1rem;font-weight:700;
+  color:var(--ink);cursor:pointer;text-transform:uppercase;letter-spacing:.08em;
+  box-shadow:0 3px 0 #6b4a00, 0 4px 8px rgba(0,0,0,0.3);
+  transition:transform .1s, box-shadow .1s;
+  margin:4px 4px;
+}
+.btn-paper:hover{transform:translateY(-1px);box-shadow:0 4px 2px #6b4a00,0 6px 12px rgba(0,0,0,0.3)}
+.btn-paper:active{transform:translateY(2px);box-shadow:0 1px 0 #6b4a00}
+.btn-paper.primary{background:linear-gradient(to bottom,#6fad60,#3d7a2e);border-color:#2a5a1a;color:#fff;box-shadow:0 3px 0 #1a3a0a,0 4px 8px rgba(0,0,0,0.3)}
+.btn-paper.secondary{background:linear-gradient(to bottom,#c8b890,#a09060);border-color:#706040}
+.btn-paper.danger{background:linear-gradient(to bottom,#c84040,#8b1c1c);border-color:#600;color:#fff;box-shadow:0 3px 0 #400,0 4px 8px rgba(0,0,0,0.3)}
+.btn-paper.small{padding:5px 12px;font-size:.85rem}
+.mini-btn{
+  padding:3px 8px;font-size:.8rem;cursor:pointer;
+  background:var(--paper-dark);border:1px solid var(--paper-edge);
+  border-radius:2px;color:var(--ink);font-family:'Crimson Text',serif;
+}
+.mini-btn.danger{background:#fee;border-color:#c44;color:#811}
+
+/* ── Main Game Layout ──────────────────────────────────── */
+#game-area{
+  display:none;width:100%;height:100vh;
+  flex-direction:column;background:#1a0a02;
+}
+#top-bar{
+  height:42px;min-height:42px;
+  background:linear-gradient(to bottom,#2c1810,#1a0a02);
+  border-bottom:2px solid #6b3010;
+  display:flex;align-items:center;gap:12px;padding:0 12px;
+  font-family:'MedievalSharp',serif;color:#d4a84b;
+}
+#top-bar-title{font-size:1.1rem;letter-spacing:.15em}
+#turn-indicator{
+  display:flex;align-items:center;gap:8px;
+  background:rgba(255,255,255,0.07);
+  padding:4px 14px;border-radius:3px;border:1px solid #6b3010;
+  font-family:'Crimson Text',serif;font-size:.95rem;color:#e8d4a0;
+  margin-left:auto;
+}
+.turn-dot{width:10px;height:10px;border-radius:50%;border:1px solid rgba(255,255,255,0.4)}
+.turn-indicator.my-turn{background:rgba(100,180,80,0.15);border-color:#4a8a30}
+.round-badge{
+  margin-left:8px;font-size:.75rem;
+  background:rgba(255,255,255,0.1);
+  padding:2px 8px;border-radius:10px;color:#c0a060;
+}
+
+#main-body{
+  flex:1;display:flex;overflow:hidden;min-height:0;
+}
+
+/* ── Map ────────────────────────────────────────────────── */
+#map-area{
+  flex:1;position:relative;min-width:0;
+  background:radial-gradient(ellipse at center, #3d6b4a 0%, #1a3020 100%);
+}
+#map-canvas{display:block;width:100%;height:100%}
+
+/* ── Side Panels ────────────────────────────────────────── */
+#right-panel{
+  width:260px;min-width:220px;
+  background:var(--paper-bg);
+  border-left:3px solid var(--paper-edge);
+  display:flex;flex-direction:column;
+  overflow:hidden;
+}
+.panel-section{
+  border-bottom:2px solid var(--paper-edge);
+  padding:10px 12px;
+}
+.panel-title{
+  font-family:'MedievalSharp',serif;font-size:.85rem;
+  color:var(--ink-light);letter-spacing:.1em;
+  text-transform:uppercase;margin-bottom:8px;
+}
+#scoreboard{overflow-y:auto;max-height:200px}
+.score-row{
+  display:flex;align-items:center;gap:6px;
+  padding:5px 4px;border-bottom:1px solid var(--paper-dark);
+  font-size:.9rem;color:var(--ink);flex-wrap:wrap;
+}
+.score-row.me{background:rgba(100,180,80,0.1)}
+.score-row.dead{opacity:.4;text-decoration:line-through}
+.score-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.score-name{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.score-terr,.score-troops{font-size:.8rem;color:var(--ink-light)}
+.ally-badge{font-size:.8rem}
+
+/* Cards */
+#my-cards{
+  display:flex;flex-wrap:wrap;gap:4px;padding:4px 0;
+}
+.card{
+  width:36px;height:52px;border-radius:4px;
+  border:2px solid var(--paper-edge);
+  background:var(--paper-bg);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  font-size:.6rem;gap:2px;cursor:pointer;
+  transition:transform .1s,box-shadow .1s;
+  position:relative;
+}
+.card:hover{transform:translateY(-3px);box-shadow:0 4px 8px var(--shadow)}
+.card.infantry{border-color:#4a8a30;background:#eef8e8}
+.card.cavalry{border-color:#2a6ab0;background:#e8f0fc}
+.card.artillery{border-color:#8b1c1c;background:#fce8e8}
+.card.wild{border-color:#8b6914;background:#fdf0c0}
+.card.selected{outline:3px solid #f0a030;transform:translateY(-4px)}
+.card-icon{font-size:1.2rem;line-height:1}
+.card-type{font-size:.55rem;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-light)}
+.card-terr{font-size:.45rem;color:var(--ink-light);text-align:center;max-width:30px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.no-cards{font-style:italic;color:var(--ink-light);font-size:.85rem}
+
+/* Phase Bar */
+#bottom-bar{
+  background:linear-gradient(to top,#2c1810,#1a0a02);
+  border-top:2px solid #6b3010;
+  padding:8px 16px;
+  display:flex;align-items:center;gap:12px;min-height:54px;
+}
+#phase-bar{
+  display:flex;align-items:center;gap:6px;
+  background:rgba(255,255,255,0.05);
+  padding:6px 16px;border-radius:3px;border:1px solid #6b3010;
+}
+.phase-step{
+  font-family:'Crimson Text',serif;font-size:.85rem;
+  color:#806040;padding:3px 10px;border-radius:2px;
+  transition:all .2s;
+}
+.phase-step.active{
+  color:#f0c050;background:rgba(240,192,80,0.12);
+  font-weight:700;border:1px solid rgba(240,192,80,0.3);
+}
+.phase-step.done{color:#50803a}
+.phase-arrow{color:#6b4020;font-size:1.1rem}
+#action-buttons{display:flex;gap:6px;align-items:center;margin-left:auto}
+#draft-counter{
+  padding:6px 14px;background:rgba(80,160,60,0.15);
+  border:1px solid #4a8030;border-radius:3px;
+  font-family:'Crimson Text',serif;font-size:.9rem;color:#90d070;
+  display:none;
+}
+#attack-hint{
+  display:none;padding:6px 12px;
+  background:rgba(180,50,50,0.12);border:1px solid #8b3030;border-radius:3px;
+  font-size:.85rem;color:#d09080;max-width:240px;
+}
+#attack-hint .hint{font-style:italic;font-size:.8rem;color:#a07060}
+
+/* Chat */
+#chat-section{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0}
+#chat-messages{
+  flex:1;overflow-y:auto;padding:8px;
+  font-size:.82rem;line-height:1.5;
+  background:#fdf5de;
+}
+.chat-msg{padding:2px 0;border-bottom:1px solid var(--paper-dark);word-break:break-word}
+.chat-name{font-weight:700}
+#chat-input-row{
+  display:flex;border-top:2px solid var(--paper-edge);
+  background:var(--paper-bg);
+}
+#chat-input{
+  flex:1;padding:8px 10px;border:none;background:transparent;
+  font-family:'Crimson Text',serif;font-size:.9rem;color:var(--ink);outline:none;
+}
+#chat-send{
+  padding:8px 14px;background:var(--paper-dark);border:none;border-left:1px solid var(--paper-edge);
+  font-family:'Crimson Text',serif;font-size:.85rem;cursor:pointer;color:var(--ink);
+}
+#chat-send:hover{background:#c8a840;color:#fff}
+
+/* Proposals area */
+#proposals-area{
+  position:fixed;bottom:70px;left:12px;
+  display:flex;flex-direction:column;gap:8px;z-index:50;max-width:280px;
+}
+.proposal-toast{
+  padding:10px 14px;font-size:.88rem;color:var(--ink);
+  animation:slideIn .3s ease;
+}
+@keyframes slideIn{from{transform:translateX(-100%);opacity:0}to{transform:translateX(0);opacity:1}}
+.toast-actions{margin-top:8px;display:flex;gap:6px}
+
+/* Paper panel base */
+.paper-panel{
+  background:var(--paper-bg);
+  border:2px solid var(--paper-edge);
+  border-radius:4px;
+  box-shadow:0 4px 20px var(--shadow), inset 0 1px 0 rgba(255,255,255,0.6);
+}
+
+/* ── Modals ─────────────────────────────────────────────── */
+.modal-overlay{
+  position:fixed;inset:0;z-index:200;
+  background:rgba(0,0,0,0.6);backdrop-filter:blur(2px);
+  display:flex;align-items:center;justify-content:center;
+}
+.modal{
+  padding:28px 32px;min-width:320px;max-width:480px;width:90vw;
+  animation:popIn .2s ease;
+}
+@keyframes popIn{from{transform:scale(.88);opacity:0}to{transform:scale(1);opacity:1}}
+.modal-title{
+  font-family:'MedievalSharp',serif;font-size:1.3rem;
+  color:var(--ink);text-align:center;margin-bottom:16px;
+}
+.modal-hint{
+  font-style:italic;font-size:.88rem;color:var(--ink-light);
+  text-align:center;margin-bottom:14px;
+}
+.modal-actions{display:flex;justify-content:center;gap:8px;margin-top:18px;flex-wrap:wrap}
+
+/* Attack modal */
+.attack-info{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:18px}
+.attack-from,.attack-to{
+  font-family:'IM Fell English',serif;font-size:1rem;
+  padding:8px 14px;background:var(--paper-dark);border:1px solid var(--paper-edge);
+  border-radius:3px;text-align:center;min-width:100px;
+}
+.attack-arrow{font-size:1.6rem;color:var(--red)}
+.dice-select{margin-bottom:12px;text-align:center}
+.dice-select label{display:block;font-weight:600;margin-bottom:8px;color:var(--ink-light)}
+.dice-btns{display:flex;justify-content:center;gap:8px}
+.dice-btn{
+  padding:10px 16px;font-size:1rem;cursor:pointer;
+  background:var(--paper-dark);border:2px solid var(--paper-edge);border-radius:3px;
+  font-family:'Crimson Text',serif;color:var(--ink);transition:all .15s;
+}
+.dice-btn.selected{background:#d44;border-color:#800;color:#fff}
+
+/* Dice result modal */
+.battle-summary{text-align:center;font-style:italic;color:var(--ink-light);margin-bottom:14px}
+.dice-row{display:flex;align-items:flex-start;justify-content:center;gap:20px;margin-bottom:14px}
+.dice-group{text-align:center}
+.dice-label{font-weight:700;margin-bottom:8px;font-size:.9rem}
+.dice-faces{display:flex;gap:6px;justify-content:center}
+.die{
+  width:40px;height:40px;border-radius:6px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.4rem;font-weight:700;font-family:'MedievalSharp',serif;
+  border:3px solid;animation:rollIn .4s ease;
+}
+@keyframes rollIn{from{transform:rotate(-180deg) scale(.5);opacity:0}to{transform:none;opacity:1}}
+.die.red{background:#fce8e8;border-color:#8b1c1c;color:#8b1c1c}
+.die.blue{background:#e8f0fc;border-color:#1c3a8b;color:#1c3a8b}
+.dice-vs{
+  font-family:'MedievalSharp',serif;font-size:1.3rem;
+  color:var(--ink-light);align-self:center;
+}
+.losses{text-align:center;font-weight:600;font-size:.95rem;margin-bottom:10px}
+.conquered-banner{
+  text-align:center;font-family:'MedievalSharp',serif;
+  font-size:1.1rem;color:var(--red);
+  background:#fee8e8;border:2px solid var(--red);
+  padding:8px;border-radius:3px;margin-bottom:12px;
+  animation:pulse .4s ease infinite alternate;
+}
+@keyframes pulse{from{transform:scale(1)}to{transform:scale(1.03)}}
+
+/* Card grid */
+.card-grid{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;padding:8px 0}
+#trade-selection-info{text-align:center;font-style:italic;color:var(--ink-light);margin-top:6px}
+
+/* Fortify */
+.fortify-info{text-align:center;margin-bottom:14px;font-size:1rem}
+.slider-row{display:flex;align-items:center;gap:12px;padding:8px 0}
+.slider-row input[type=range]{flex:1}
+
+/* Trade */
+.trade-row{display:flex;align-items:center;gap:12px;padding:8px 0;justify-content:center}
+.trade-row label{font-weight:600;color:var(--ink-light)}
+.trade-row input{width:80px;padding:6px;font-family:'Crimson Text',serif;font-size:1rem;border:2px solid var(--paper-edge);background:var(--paper-dark);border-radius:3px;text-align:center;color:var(--ink)}
+
+/* Victory */
+.victory-overlay{
+  position:fixed;inset:0;z-index:999;
+  background:rgba(0,0,0,0.85);backdrop-filter:blur(4px);
+  display:flex;align-items:center;justify-content:center;
+}
+.victory-panel{padding:48px;text-align:center;max-width:420px;animation:popIn .5s ease}
+.victory-crown{font-size:5rem;animation:bounce 1s ease infinite alternate}
+@keyframes bounce{from{transform:translateY(0)}to{transform:translateY(-12px)}}
+.victory-title{
+  font-family:'MedievalSharp',serif;font-size:2rem;
+  color:var(--ink);margin:12px 0 6px;letter-spacing:.1em;
+}
+.victory-player{font-family:'MedievalSharp',serif;font-size:1.5rem;font-weight:700}
+.victory-subtitle{font-style:italic;color:var(--ink-light);margin-bottom:24px}
+
+/* Scrollbars */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--paper-dark)}
+::-webkit-scrollbar-thumb{background:var(--paper-edge);border-radius:3px}
+</style>
+</head>
+<body>
+
+<!-- ═══ LOBBY ═══════════════════════════════════════════ -->
+<div id="lobby">
+  <div class="lobby-card">
+    <div class="lobby-title">DOMINION</div>
+    <div class="lobby-subtitle">A Game of World Conquest</div>
+
+    <div id="lobby-setup">
+      <div class="lobby-input-group">
+        <label>Your Name</label>
+        <input class="paper-input" id="player-name" placeholder="Enter your name..." maxlength="20">
+      </div>
+      <div class="lobby-input-group">
+        <label>Ably API Key</label>
+        <input class="paper-input" id="ably-key" placeholder="xxxx:xxxx" type="password">
+      </div>
+
+      <button class="btn-paper primary" style="width:100%;margin-top:8px" onclick="createRoom()">
+        ✦ Create Room
+      </button>
+
+      <div class="lobby-or">— or join existing room —</div>
+
+      <div style="display:flex;gap:8px">
+        <input class="paper-input" id="join-code" placeholder="Room code..." maxlength="6" style="flex:1;text-transform:uppercase">
+        <button class="btn-paper" onclick="joinRoom()">Join</button>
+      </div>
+    </div>
+
+    <div id="lobby-room" style="display:none">
+      <div style="margin-bottom:10px;color:var(--ink-light);font-size:.9rem">Room Code:</div>
+      <div class="room-code-display" id="room-code-display">------</div>
+      <div id="player-count" style="margin-top:6px">0/6 players</div>
+      <div id="lobby-players"></div>
+      <div id="waiting-msg" style="margin-top:12px"></div>
+      <button class="btn-paper primary" id="start-btn" style="display:none;margin-top:16px;width:100%" onclick="startGame()">
+        ⚔ Start Game
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ GAME ════════════════════════════════════════════ -->
+<div id="game-area">
+  <!-- Top bar -->
+  <div id="top-bar">
+    <span id="top-bar-title">⚔ DOMINION</span>
+    <div id="turn-indicator">
+      <span class="turn-dot"></span>
+      <span>Waiting...</span>
+    </div>
+  </div>
+
+  <!-- Main body -->
+  <div id="main-body">
+    <!-- Map -->
+    <div id="map-area">
+      <canvas id="map-canvas"></canvas>
+    </div>
+
+    <!-- Right Panel -->
+    <div id="right-panel">
+
+      <!-- Scoreboard -->
+      <div class="panel-section">
+        <div class="panel-title">⚔ Players</div>
+        <div id="scoreboard"></div>
+      </div>
+
+      <!-- My Cards -->
+      <div class="panel-section">
+        <div class="panel-title">🃏 My Cards</div>
+        <div id="my-cards"><span class="no-cards">No cards</span></div>
+      </div>
+
+      <!-- Chat -->
+      <div class="panel-section chat-section" style="flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden">
+        <div class="panel-title">💬 Chat</div>
+        <div id="chat-messages" style="flex:1;overflow-y:auto"></div>
+        <div id="chat-input-row">
+          <input id="chat-input" placeholder="Type a message..." maxlength="200">
+          <button id="chat-send" onclick="sendChat()">›</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Bottom bar -->
+  <div id="bottom-bar">
+    <div id="phase-bar">
+      <div class="phase-step">✦ Draft</div>
+      <div class="phase-arrow">›</div>
+      <div class="phase-step">⚔ Attack</div>
+      <div class="phase-arrow">›</div>
+      <div class="phase-step">⛺ Fortify</div>
+    </div>
+    <div id="draft-counter"></div>
+    <div id="attack-hint"></div>
+    <div id="action-buttons"></div>
+  </div>
+</div>
+
+<!-- Proposals / trade toasts -->
+<div id="proposals-area"></div>
+
+<!-- Scripts -->
+<script src="assets.js"></script>
+<script src="gamedata.js"></script>
+<script src="gamestate.js"></script>
+<script src="map.js"></script>
+<script src="ably-sync.js"></script>
+<script src="ui-manager.js"></script>
+<script src="game-controller.js"></script>
+
+<script>
+// ── Entry point ───────────────────────────────────────────
+let gc, uiMgr;
+
+function generateRoomCode() {
+  return Math.random().toString(36).substring(2,8).toUpperCase();
+}
+
+function getOrCreatePlayerId() {
+  let id = sessionStorage.getItem('dominion_pid');
+  if (!id) {
+    id = 'p_' + Math.random().toString(36).substring(2,10);
+    sessionStorage.setItem('dominion_pid', id);
+  }
+  return id;
+}
+
+async function createRoom() {
+  const name  = document.getElementById('player-name').value.trim();
+  const key   = document.getElementById('ably-key').value.trim();
+  if (!name)  { alert('Enter your name'); return; }
+  if (!key)   { alert('Enter your Ably API key'); return; }
+
+  const code = generateRoomCode();
+  sessionStorage.setItem('dominion_akey', key);
+  await setupGame(name, key, code);
+}
+
+async function joinRoom() {
+  const name  = document.getElementById('player-name').value.trim();
+  const key   = document.getElementById('ably-key').value.trim();
+  const code  = document.getElementById('join-code').value.trim().toUpperCase();
+  if (!name)  { alert('Enter your name'); return; }
+  if (!key)   { alert('Enter your Ably API key'); return; }
+  if (!code)  { alert('Enter a room code'); return; }
+  await setupGame(name, key, code);
+}
+
+async function setupGame(name, apiKey, roomCode) {
+  const playerId = getOrCreatePlayerId();
+
+  // Show room card
+  document.getElementById('lobby-setup').style.display = 'none';
+  document.getElementById('lobby-room').style.display  = 'block';
+  document.getElementById('room-code-display').textContent = roomCode;
+
+  // Init controller
+  gc     = new GameController();
+  uiMgr  = new UIManager(gc);
+  gc.uiManager = uiMgr;
+  gc.myPlayerId   = playerId;
+  gc.myPlayerName = name;
+
+  // Connect
+  await gc.connectMultiplayer(apiKey, roomCode);
+  window.gc    = gc;
+  window.uiMgr = uiMgr;
+
+  console.log('Connected. isHost:', gc.isHost);
+}
+
+function startGame() {
+  if (!gc?.sync?.members?.length) { alert('No players connected'); return; }
+  const players = gc.sync.members.map((m, i) => ({
+    id:       m.data?.id || m.clientId,
+    name:     m.data?.name || m.clientId,
+    colorIdx: i,
+  }));
+  gc.startGame(players);
+  gc.sync.onStateUpdate = (data) => {
+    gc.state.loadFrom(data.state);
+    if (gc.state.status === 'playing') {
+      showGameArea();
+    }
+    uiMgr.refresh(gc.state, gc.myPlayerId);
+  };
+  // Host also gets state update via broadcastState
+  showGameArea();
+}
+
+function showGameArea() {
+  document.getElementById('lobby').style.display = 'none';
+  document.getElementById('game-area').style.display = 'flex';
+
+  const canvas = document.getElementById('map-canvas');
+  gc.init(canvas, gc.myPlayerId, gc.myPlayerName);
+  uiMgr.refresh(gc.state, gc.myPlayerId);
+}
+
+function sendChat() {
+  const input = document.getElementById('chat-input');
+  const text  = input.value.trim();
+  if (!text) return;
+  gc.sendChat(text);
+  input.value = '';
+}
+
+document.getElementById('chat-input')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') sendChat();
+});
+
+// Allow pressing Enter in join input
+document.getElementById('join-code')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') joinRoom();
+});
+document.getElementById('player-name')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('ably-key')?.focus();
+});
+</script>
+</body>
+</html>
